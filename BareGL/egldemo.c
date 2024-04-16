@@ -25,14 +25,17 @@ uint32_t connectorId;
 
 static drmModeConnector *getConnector(drmModeRes *resources)
 {
+	int isSecond=0;
     for (int i = 0; i < resources->count_connectors; i++)
     {
         drmModeConnector *connector = drmModeGetConnector(device, resources->connectors[i]);
-        if (connector->connection == DRM_MODE_CONNECTED)
+        if (connector->connection == DRM_MODE_CONNECTED && connector->encoder_id != 0)
         {
-            return connector;
+			if(isSecond)
+	            return connector;
         }
         drmModeFreeConnector(connector);
+		isSecond++;
     }
 
     return NULL;
@@ -40,6 +43,7 @@ static drmModeConnector *getConnector(drmModeRes *resources)
 
 static drmModeEncoder *findEncoder(drmModeConnector *connector)
 {
+	// if it is 0, then not active( for example the HDMI connector has encoder 0 when no content)
     if (connector->encoder_id)
     {
         return drmModeGetEncoder(device, connector->encoder_id);
@@ -66,7 +70,7 @@ static int getDisplay(EGLDisplay *display)
 
     connectorId = connector->connector_id;
     mode = connector->modes[0];
-    printf("resolution: %ix%i\nConnector_Id=%i\n", mode.hdisplay, mode.vdisplay,connectorId);
+    printf("resolution: %ix%i\nConnector_Id=%i,encoderid=%i\n", mode.hdisplay, mode.vdisplay,connectorId,connector->encoder_id);
 
     drmModeEncoder *encoder = findEncoder(connector);
     if (encoder == NULL)
@@ -76,15 +80,16 @@ static int getDisplay(EGLDisplay *display)
         drmModeFreeResources(resources);
         return -1;
     }
-
 	printf("CrtcId=%d\n",encoder->crtc_id);
-    crtc = drmModeGetCrtc(device, encoder->crtc_id);
+	crtc = drmModeGetCrtc(device, encoder->crtc_id);
     drmModeFreeEncoder(encoder);
     drmModeFreeConnector(connector);
     drmModeFreeResources(resources);
     gbmDevice = gbm_create_device(device);
     gbmSurface = gbm_surface_create(gbmDevice, mode.hdisplay, mode.vdisplay, GBM_FORMAT_XRGB8888, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
-    *display = eglGetPlatformDisplay(EGL_PLATFORM_GBM_KHR, gbmDevice, NULL);
+    //*display = eglGetPlatformDisplay(EGL_PLATFORM_GBM_KHR, gbmDevice, NULL);
+	// libmali don't have eglGetPlatformDisplay, so just pass in a gbmDevice this way
+    *display = eglGetDisplay((EGLNativeDisplayType)gbmDevice);
     return 0;
 }
 
@@ -392,7 +397,7 @@ int main()
     int polor_g=1;
     int polor_b=1;
     while(1){
-    	glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+    	glClearColor(color_r, color_g, color_b, 1.0f);
     	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     	glDrawArrays(GL_TRIANGLES, 0, 3);
     	glUniform4f(colorLoc, color_r, color_g, color_b, 1.0);
